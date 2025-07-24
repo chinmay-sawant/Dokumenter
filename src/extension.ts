@@ -43,39 +43,35 @@ export function activate(context: vscode.ExtensionContext) {
         border: '1px solid #cca700',
     });
 
-    // --- Register the CodeLens Provider ---
     codeLensProvider = new SnippetCodeLensProvider();
-    const codeLensProviderDisposable = vscode.languages.registerCodeLensProvider('*', codeLensProvider);
-
-    // --- Register Commands ---
-    const handleLensActionCommand = vscode.commands.registerCommand('codeSnippetCollector.handleLensAction', handleLensAction);
-    const clearAllCommand = vscode.commands.registerCommand('codeSnippetCollector.clearAll', clearAll);
-    const quickSaveCommand = vscode.commands.registerCommand('codeSnippetCollector.quickSaveToFile', quickSaveSnippetsToFile);
+    
+    // --- Register Providers and Commands ---
+    context.subscriptions.push(
+        vscode.languages.registerCodeLensProvider('*', codeLensProvider),
+        vscode.commands.registerCommand('codeSnippetCollector.quickAdd', quickAdd),
+        vscode.commands.registerCommand('codeSnippetCollector.addWithDetails', addWithDetails),
+        vscode.commands.registerCommand('codeSnippetCollector.cancelAction', cancelAction),
+        vscode.commands.registerCommand('codeSnippetCollector.clearAll', clearAll),
+        vscode.commands.registerCommand('codeSnippetCollector.quickSaveToFile', quickSaveSnippetsToFile),
+        vscode.commands.registerCommand('codeSnippetCollector.saveAllAs', saveAllAs)
+    );
 
     // --- Status Bar ---
     clearStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
     clearStatusBarItem.command = 'codeSnippetCollector.clearAll';
-    clearStatusBarItem.text = `$(clear-all) Clear Snippets`;
-    clearStatusBarItem.tooltip = 'Clear All Snippet Highlights & Reset Collection';
+    clearStatusBarItem.text = `$(clear-all) Snippets`;
+    clearStatusBarItem.tooltip = `Clear ${snippets.length} Snippet(s) & All Highlights`;
+    context.subscriptions.push(clearStatusBarItem);
     
     // --- Event Listeners ---
-    const onDidChangeSelection = vscode.window.onDidChangeTextEditorSelection(handleSelectionChange);
-    const onDidChangeActiveEditor = vscode.window.onDidChangeActiveTextEditor(editor => {
-        if (editor) updateDecorationsForEditor(editor);
-        codeLensProvider.clear(); // Clear lenses when switching files
-    });
-    const onDidChangeTextDocument = vscode.workspace.onDidChangeTextDocument(handleTextChange);
-
     context.subscriptions.push(
-        codeLensProviderDisposable,
-        handleLensActionCommand,
-        clearAllCommand,
-        quickSaveCommand,
-        onDidChangeSelection,
-        onDidChangeActiveEditor,
-        onDidChangeTextDocument,
-        decorationType,
-        clearStatusBarItem
+        vscode.window.onDidChangeTextEditorSelection(handleSelectionChange),
+        vscode.window.onDidChangeActiveTextEditor(editor => {
+            if (editor) updateDecorationsForEditor(editor);
+            codeLensProvider.clear();
+        }),
+        vscode.workspace.onDidChangeTextDocument(handleTextChange),
+        decorationType
     );
 
     if (vscode.window.activeTextEditor) {
@@ -84,228 +80,100 @@ export function activate(context: vscode.ExtensionContext) {
     updateClearButtonVisibility();
 }
 
-// --- Core Logic ---
 
-/**
- * Handles the actions triggered by clicking on a CodeLens.
- */
-async function handleLensAction(action: 'quickAdd' | 'detailedAdd' | 'cancel', selection: vscode.Selection) {
+// --- CodeLens-Triggered Commands ---
+
+/** 1. Quick Add: Asks only for description. */
+async function quickAdd(selection: vscode.Selection) {
+    codeLensProvider.clear();
     const editor = vscode.window.activeTextEditor;
     if (!editor) return;
-
-    // Always clear the lens after an action is taken
-    codeLensProvider.clear();
-
-    if (action === 'cancel') {
-        return; // Do nothing
-    }
 
     const description = await vscode.window.showInputBox({
         prompt: "Enter a brief description for this snippet",
         placeHolder: `e.g., Function to parse user data`,
     });
 
-    if (!description) return; // User cancelled the input
-
-    let explanation: string | undefined;
-    if (action === 'detailedAdd') {
-        explanation = await vscode.window.showInputBox({
-            prompt: "Enter an optional explanation",
-            placeHolder: "e.g., This snippet handles null inputs gracefully"
-        });
+    if (description) {
+        await processSnippet(editor, selection, description, {});
     }
+}
+
+/** 2. Add with Details: Asks for description, then explanation. */
+async function addWithDetails(selection: vscode.Selection) {
+    codeLensProvider.clear();
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) return;
+
+    const description = await vscode.window.showInputBox({
+        prompt: "Step 1: Enter a description for this snippet",
+        placeHolder: "e.g., Database connection logic"
+    });
+    if (!description) return; // User cancelled
+
+    const explanation = await vscode.window.showInputBox({
+        prompt: "Step 2: Enter an optional explanation",
+        placeHolder: "e.g., Uses connection pooling and handles retry logic"
+    });
 
     await processSnippet(editor, selection, description, { explanation });
 }
 
-/**
- * Creates and stores the snippet, then highlights it.
- */
-async function processSnippet(
-    editor: vscode.TextEditor,
-    selection: vscode.Selection,
-    description: string,
-    options: { explanation?: string; }
-) {
-    const document = editor.document;
-    const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
-    
-    const snippet: CodeSnippet = {
-        relativePath: workspaceFolder
-            ? path.relative(workspaceFolder.uri.fsPath, document.uri.fsPath)
-            : document.uri.fsPath,
-        code: document.getText(selection),
-        language: document.languageId,
-        description,
-        explanation: options.explanation || undefined,
-        range: selection
-    };
-
-    snippets.push(snippet);
-    addHighlight(editor, selection, snippet.description);
-    
-    vscode.window.showInformationMessage(`Snippet saved! Total in collection: ${snippets.length}`);
-}
-
-/**
- * NEW: Saves all collected snippets to a file with an auto-generated name.
- */
+/** 3. Quick Save: Saves all snippets to an auto-generated file. */
 async function quickSaveSnippetsToFile() {
-    codeLensProvider.clear(); // Hide lenses after action
-
+    codeLensProvider.clear();
     if (snippets.length === 0) {
-        vscode.window.showWarningMessage('No snippets in the collection to save.');
+        vscode.window.showWarningMessage('No snippets to save.');
         return;
     }
 
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     if (!workspaceFolder) {
-        vscode.window.showErrorMessage('Cannot save, please open a workspace folder first.');
+        vscode.window.showErrorMessage('Cannot save, please open a workspace folder.');
         return;
     }
 
-    // Generate filename: parentFolder_YYYYMMDD_HHMMSS.md
     const parentFolderName = path.basename(workspaceFolder.uri.fsPath);
-    const markdownsDir = vscode.Uri.joinPath(workspaceFolder.uri, 'markdowns');
-    if (!fs.existsSync(markdownsDir.fsPath)) {
-        fs.mkdirSync(markdownsDir.fsPath);
-    }
     const timestamp = new Date().toISOString().replace(/[-:.]/g, '').replace('T', '_').slice(0, 15);
     const fileName = `${parentFolderName}_${timestamp}.md`;
-    const fileUri = vscode.Uri.joinPath(markdownsDir, fileName);
-
-    const content = generateMarkdownContent(snippets);
-
-    try {
-        fs.writeFileSync(fileUri.fsPath, content);
-        vscode.window.showInformationMessage(`${snippets.length} snippets saved to ${fileName}`);
-        
-        // Clear everything after a successful save
-        clearAll(false); // Pass false to avoid redundant message
-        
-        // Open the saved file for the user
-        const doc = await vscode.workspace.openTextDocument(fileUri);
-        await vscode.window.showTextDocument(doc);
-        
-    } catch (error: any) {
-        vscode.window.showErrorMessage(`Failed to quick-save snippets: ${error.message}`);
+    const fileUri = vscode.Uri.joinPath(workspaceFolder.uri, "markdowns", fileName);
+    const markdownFolderPath = path.join(workspaceFolder.uri.fsPath, "markdowns");
+    if (!fs.existsSync(markdownFolderPath)) {
+        fs.mkdirSync(markdownFolderPath, { recursive: true });
     }
+    await saveAndFinalize(fileUri);
 }
 
-// --- Event Handlers and Providers ---
-
-class SnippetCodeLensProvider implements vscode.CodeLensProvider {
-    private _onDidChangeCodeLenses: vscode.EventEmitter<void> = new vscode.EventEmitter<void>();
-    public readonly onDidChangeCodeLenses: vscode.Event<void> = this._onDidChangeCodeLenses.event;
-
-    private activeSelection: vscode.Selection | undefined;
-    private activeEditorUri: string | undefined;
-
-    public provideCodeLenses(document: vscode.TextDocument): vscode.CodeLens[] | Thenable<vscode.CodeLens[]> {
-        if (!this.activeSelection || this.activeEditorUri !== document.uri.toString()) {
-            return [];
-        }
-
-        const range = new vscode.Range(this.activeSelection.start, this.activeSelection.start);
-        const lenses: vscode.CodeLens[] = [
-            new vscode.CodeLens(range, {
-                title: "✓ Quick Add",
-                command: 'codeSnippetCollector.handleLensAction',
-                arguments: ['quickAdd', this.activeSelection],
-                tooltip: "Save snippet with a description"
-            }),
-            new vscode.CodeLens(range, {
-                title: "＋ Add with Details",
-                command: 'codeSnippetCollector.handleLensAction',
-                arguments: ['detailedAdd', this.activeSelection],
-                tooltip: "Save with description and explanation"
-            }),
-        ];
-
-        // NEW: Conditionally show the "Quick Save" button
-        if (snippets.length > 0) {
-            lenses.push(new vscode.CodeLens(range, {
-                title: `⚡ Quick Save All (${snippets.length})`,
-                command: 'codeSnippetCollector.quickSaveToFile',
-                tooltip: 'Save all collected snippets to a new file'
-            }));
-        }
-
-        lenses.push(new vscode.CodeLens(range, {
-            title: "✕ Cancel",
-            command: 'codeSnippetCollector.handleLensAction',
-            arguments: ['cancel', this.activeSelection],
-        }));
-
-        return lenses;
-    }
-
-    public update(selection: vscode.Selection, editor: vscode.TextEditor) {
-        this.activeSelection = selection;
-        this.activeEditorUri = editor.document.uri.toString();
-        this._onDidChangeCodeLenses.fire();
-    }
-
-    public clear() {
-        this.activeSelection = undefined;
-        this.activeEditorUri = undefined;
-        this._onDidChangeCodeLenses.fire();
-    }
-}
-
-function handleSelectionChange(event: vscode.TextEditorSelectionChangeEvent) {
-    if (selectionDebounce) clearTimeout(selectionDebounce);
-    
-    const editor = event.textEditor;
-    const selection = event.selections[0];
-
-    if (!editor || selection.isEmpty) {
-        codeLensProvider.clear();
+/** 4. Save As: Lets user choose file name and location. */
+async function saveAllAs() {
+    codeLensProvider.clear();
+    if (snippets.length === 0) {
+        vscode.window.showWarningMessage('No snippets to save.');
         return;
     }
 
-    const fileDecorations = decorations.get(editor.document.uri.fsPath) || [];
-    const isAlreadyHighlighted = fileDecorations.some(deco => deco.range.contains(selection));
-    if (isAlreadyHighlighted) {
-        codeLensProvider.clear();
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+        vscode.window.showErrorMessage('Cannot save, please open a workspace folder.');
         return;
     }
 
-    selectionDebounce = setTimeout(() => {
-        if (!editor.selection.isEmpty) {
-            codeLensProvider.update(selection, editor);
-        }
-    }, 300); // Reduced delay for faster response
-}
-
-function handleTextChange(event: vscode.TextDocumentChangeEvent) {
-    const filePath = event.document.uri.fsPath;
-    if (decorations.has(filePath)) {
-        decorations.delete(filePath);
-        snippets = snippets.filter(s => s.relativePath !== filePath);
-        codeLensProvider.clear();
-        const editor = vscode.window.visibleTextEditors.find(e => e.document.uri.fsPath === filePath);
-        if (editor) editor.setDecorations(decorationType, []);
-        updateClearButtonVisibility();
-    }
-}
-
-
-// --- Helper and Utility Functions ---
-
-function addHighlight(editor: vscode.TextEditor, range: vscode.Range, description: string) {
-    const filePath = editor.document.uri.fsPath;
-    if (!decorations.has(filePath)) decorations.set(filePath, []);
-    
-    decorations.get(filePath)!.push({
-        range: range,
-        hoverMessage: new vscode.MarkdownString(`**Saved Snippet:**\n\n> ${description}`)
+    const fileUri = await vscode.window.showSaveDialog({
+        defaultUri: vscode.Uri.joinPath(workspaceFolder.uri, 'code-snippets.md'),
+        filters: { 'Markdown': ['md'] }
     });
-    
-    editor.setDecorations(decorationType, decorations.get(filePath)!);
-    updateClearButtonVisibility();
+
+    if (fileUri) {
+        await saveAndFinalize(fileUri);
+    }
 }
 
+/** 5. Cancel: Hides the CodeLens UI. */
+function cancelAction() {
+    codeLensProvider.clear();
+}
+
+/** 6. Clear All: Resets the entire collection and all highlights. */
 function clearAll(showMessage = true) {
     snippets = []; 
     decorations.clear();
@@ -319,39 +187,161 @@ function clearAll(showMessage = true) {
     }
 }
 
-function updateDecorationsForEditor(editor: vscode.TextEditor | undefined) {
-    if (!editor) return;
+
+// --- Core Logic and Providers ---
+
+class SnippetCodeLensProvider implements vscode.CodeLensProvider {
+    private _onDidChangeCodeLenses: vscode.EventEmitter<void> = new vscode.EventEmitter<void>();
+    public readonly onDidChangeCodeLenses: vscode.Event<void> = this._onDidChangeCodeLenses.event;
+
+    private activeSelection: vscode.Selection | undefined;
+
+    public provideCodeLenses(document: vscode.TextDocument): vscode.CodeLens[] {
+        if (!this.activeSelection || vscode.window.activeTextEditor?.document.uri.toString() !== document.uri.toString()) {
+            return [];
+        }
+
+        const range = new vscode.Range(this.activeSelection.start, this.activeSelection.start);
+        
+        // --- Snippet-specific actions ---
+        const lenses: vscode.CodeLens[] = [
+            new vscode.CodeLens(range, { title: "⚡ Quick Add", command: 'codeSnippetCollector.quickAdd', arguments: [this.activeSelection]}),
+            new vscode.CodeLens(range, { title: "＋ Add with Details", command: 'codeSnippetCollector.addWithDetails', arguments: [this.activeSelection]}),
+        ];
+
+        // --- Collection-level actions (only show if snippets exist) ---
+        if (snippets.length > 0) {
+            lenses.push(new vscode.CodeLens(range, { title: "|", command: ""})); // Separator
+            lenses.push(new vscode.CodeLens(range, { title: `⚡ Quick Save All (${snippets.length})`, command: 'codeSnippetCollector.quickSaveToFile' }));
+            lenses.push(new vscode.CodeLens(range, { title: `💾 Save All As...`, command: 'codeSnippetCollector.saveAllAs' }));
+            lenses.push(new vscode.CodeLens(range, { title: `🗑️ Clear All`, command: 'codeSnippetCollector.clearAll' }));
+        }
+
+        lenses.push(new vscode.CodeLens(range, { title: "✕ Cancel", command: 'codeSnippetCollector.cancelAction' }));
+
+        return lenses;
+    }
+
+    public update(selection: vscode.Selection) {
+        this.activeSelection = selection;
+        this._onDidChangeCodeLenses.fire();
+    }
+
+    public clear() {
+        this.activeSelection = undefined;
+        this._onDidChangeCodeLenses.fire();
+    }
+}
+
+function handleSelectionChange(event: vscode.TextEditorSelectionChangeEvent) {
+    if (selectionDebounce) clearTimeout(selectionDebounce);
+    
+    const selection = event.selections[0];
+    if (selection.isEmpty) {
+        codeLensProvider.clear();
+        return;
+    }
+    
+    const fileDecorations = decorations.get(event.textEditor.document.uri.fsPath) || [];
+    if (fileDecorations.some(deco => deco.range.contains(selection))) {
+        codeLensProvider.clear();
+        return;
+    }
+
+    selectionDebounce = setTimeout(() => {
+        if (!event.textEditor.selection.isEmpty) {
+            codeLensProvider.update(selection);
+        }
+    }, 300);
+}
+
+
+// --- Helper and Utility Functions ---
+
+async function processSnippet(editor: vscode.TextEditor, selection: vscode.Selection, description: string, options: { explanation?: string }) {
+    const document = editor.document;
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+    
+    const snippet: CodeSnippet = {
+        relativePath: workspaceFolder ? path.relative(workspaceFolder.uri.fsPath, document.uri.fsPath) : document.uri.fsPath,
+        code: document.getText(selection),
+        language: document.languageId,
+        description,
+        explanation: options.explanation || undefined,
+        range: selection
+    };
+
+    snippets.push(snippet);
+    addHighlight(editor, selection, snippet.description);
+    vscode.window.showInformationMessage(`Snippet saved! Total in collection: ${snippets.length}`);
+    codeLensProvider.update(selection); // Refresh lenses to show collection actions
+}
+
+async function saveAndFinalize(fileUri: vscode.Uri) {
+    const content = generateMarkdownContent(snippets);
+    try {
+        fs.writeFileSync(fileUri.fsPath, content);
+        vscode.window.showInformationMessage(`${snippets.length} snippets saved to ${path.basename(fileUri.fsPath)}`);
+        
+        clearAll(false); // Clear collection without showing a redundant message
+        
+        const doc = await vscode.workspace.openTextDocument(fileUri);
+        await vscode.window.showTextDocument(doc);
+    } catch (error: any) {
+        vscode.window.showErrorMessage(`Failed to save snippets: ${error.message}`);
+    }
+}
+
+function generateMarkdownContent(snippetsToSave: CodeSnippet[]): string {
+    let content = `# Code Snippets Collection\n\n*Generated on: ${new Date().toLocaleString()}*\n\n---\n\n`;
+    snippetsToSave.forEach((snippet) => {
+        content += `## ${snippet.description}\n\n`;
+        content += `**File:** \`${snippet.relativePath}\`\n\n`;
+        if (snippet.explanation) {
+            content += `**Explanation:**\n\n> ${snippet.explanation.replace(/\n/g, '\n> ')}\n\n`;
+        }
+        content += `**Code:**\n`;
+        content += '```' + `${snippet.language}\n${snippet.code}\n` + '```\n\n---\n\n';
+    });
+    return content;
+}
+
+function addHighlight(editor: vscode.TextEditor, range: vscode.Range, description: string) {
     const filePath = editor.document.uri.fsPath;
-    editor.setDecorations(decorationType, decorations.get(filePath) || []);
+    if (!decorations.has(filePath)) decorations.set(filePath, []);
+    decorations.get(filePath)!.push({
+        range: range,
+        hoverMessage: new vscode.MarkdownString(`**Saved Snippet:**\n\n> ${description}`)
+    });
+    updateDecorationsForEditor(editor);
+    updateClearButtonVisibility();
+}
+
+function updateDecorationsForEditor(editor: vscode.TextEditor) {
+    editor.setDecorations(decorationType, decorations.get(editor.document.uri.fsPath) || []);
 }
 
 function updateClearButtonVisibility() {
-    if (decorations.size > 0) {
+    if (snippets.length > 0) {
+        clearStatusBarItem.text = `$(clear-all) Snippets (${snippets.length})`;
+        clearStatusBarItem.tooltip = `Clear ${snippets.length} Snippet(s) & All Highlights`;
         clearStatusBarItem.show();
     } else {
         clearStatusBarItem.hide();
     }
 }
 
-function generateMarkdownContent(snippetsToSave: CodeSnippet[]): string {
-    let content = `# Code Snippets Collection\n\n`;
-    content += `*Generated on: ${new Date().toLocaleString()}*\n\n`;
-    snippetsToSave.forEach((snippet) => {
-        content += `## ${snippet.description}\n\n`;
-        content += `**File:** \`${snippet.relativePath}\`\n\n`;
-        if (snippet.explanation) {
-            content += `**Explanation:**\n\n${snippet.explanation}\n\n`;
-        }
-        content += `**Code:**\n`;
-        content += '```' + `${snippet.language}\n`;
-        content += snippet.code;
-        content += '\n```\n\n---\n\n';
-    });
-    return content;
+function handleTextChange(event: vscode.TextDocumentChangeEvent) {
+    const filePath = event.document.uri.fsPath;
+    if (decorations.has(filePath)) {
+        decorations.delete(filePath);
+        snippets = snippets.filter(s => s.relativePath !== filePath);
+        codeLensProvider.clear();
+        updateDecorationsForEditor(event.document.uri.fsPath as any);
+        updateClearButtonVisibility();
+    }
 }
 
 export function deactivate() {
     if (selectionDebounce) clearTimeout(selectionDebounce);
-    decorationType?.dispose();
-    clearStatusBarItem?.dispose();
 }
