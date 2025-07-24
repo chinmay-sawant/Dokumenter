@@ -1,0 +1,57 @@
+{
+  "name": "code-snippet-collector",
+  "displayName": "Code Snippet Collector",
+  "description": "Collect and store code snippets with relative paths",
+  "version": "1.0.0",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:codeSnippetCollector.saveSnippet",
+    "onCommand:codeSnippetCollector.clearHighlights"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "codeSnippetCollector.saveSnippet",
+        "title": "Save Code Snippet",
+        "category": "Snippet Collector"
+      },
+      {
+        "command": "codeSnippetCollector.clearHighlights",
+        "title": "Clear All Highlights",
+        "category": "Snippet Collector"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "codeSnippetCollector.saveSnippet",
+        "key": "ctrl+shift+s",
+        "when": "editorHasSelection"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "codeSnippetCollector.saveSnippet",
+          "when": "editorHasSelection",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "16.x",
+    "@types/vscode": "^1.74.0",
+    "typescript": "^4.9.4"
+  }
+}
