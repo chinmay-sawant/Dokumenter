@@ -1,6 +1,7 @@
 {
   "name": "code-snippet-collector",
-  "displayName": "Code Snippet Collector",
+  "publisher": "chinmay-sawant",
+  "displayName": "CodeMark",
   "description": "Collect and store code snippets with relative paths",
   "version": "1.0.0",
   "engines": {
@@ -9,10 +10,7 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [
-    "onCommand:codeSnippetCollector.saveSnippet",
-    "onCommand:codeSnippetCollector.clearHighlights"
-  ],
+  "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
@@ -53,5 +51,9 @@
     "@types/node": "16.x",
     "@types/vscode": "^1.74.0",
     "typescript": "^4.9.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chinmay-sawant/Dokumenter.git"
   }
 }
