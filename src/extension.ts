@@ -78,7 +78,9 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('dokumenter.editExplanation', (line: number, filePath: string) => 
             snippetDescriptionLensProvider.handleEditExplanation(line, filePath)),
         vscode.commands.registerCommand('dokumenter.deleteExplanation', (line: number, filePath: string) => 
-            snippetDescriptionLensProvider.handleDeleteExplanation(line, filePath))
+            snippetDescriptionLensProvider.handleDeleteExplanation(line, filePath)),
+        vscode.commands.registerCommand('dokumenter.copySnippet', (line: number, filePath: string) => 
+            snippetDescriptionLensProvider.handleCopySnippet(line, filePath))
     );
 
     // --- Status Bar ---

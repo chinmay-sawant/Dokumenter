@@ -41,7 +41,7 @@ export class SnippetDescriptionLensProvider implements vscode.CodeLensProvider {
                 }
             ));
 
-            // Edit and Delete buttons with index reference
+            // Edit button
             codeLenses.push(new vscode.CodeLens(
                 new vscode.Range(line, 0, line, 0),
                 {
@@ -51,6 +51,18 @@ export class SnippetDescriptionLensProvider implements vscode.CodeLensProvider {
                 }
             ));
 
+            // Copy button - make sure this is properly positioned
+            codeLenses.push(new vscode.CodeLens(
+                new vscode.Range(line, 0, line, 0),
+                {
+                    title: '📋 Copy',
+                    command: 'dokumenter.copySnippet',
+                    arguments: [line, filePath],
+                    tooltip: 'Copy snippet in markdown format'
+                }
+            ));
+
+            // Delete button
             codeLenses.push(new vscode.CodeLens(
                 new vscode.Range(line, 0, line, 0),
                 {
@@ -69,6 +81,50 @@ export class SnippetDescriptionLensProvider implements vscode.CodeLensProvider {
         const relativePath = workspaceFolder ? path.relative(workspaceFolder.uri.fsPath, filePath) : filePath;
         
         return this.snippets.filter(snippet => snippet.relativePath === relativePath);
+    }
+
+    private getLanguageFromExtension(filePath: string): string {
+        const extension = path.extname(filePath).toLowerCase();
+        const languageMap: { [key: string]: string } = {
+            '.js': 'javascript',
+            '.jsx': 'javascript',
+            '.ts': 'typescript',
+            '.tsx': 'typescript',
+            '.py': 'python',
+            '.java': 'java',
+            '.go': 'go',
+            '.sql': 'sql',
+            '.c': 'c',
+            '.cpp': 'cpp',
+            '.cc': 'cpp',
+            '.cxx': 'cpp',
+            '.cs': 'csharp',
+            '.php': 'php',
+            '.rb': 'ruby',
+            '.rs': 'rust',
+            '.kt': 'kotlin',
+            '.swift': 'swift',
+            '.scala': 'scala',
+            '.r': 'r',
+            '.m': 'matlab',
+            '.sh': 'bash',
+            '.ps1': 'powershell',
+            '.html': 'html',
+            '.css': 'css',
+            '.scss': 'scss',
+            '.sass': 'sass',
+            '.less': 'less',
+            '.json': 'json',
+            '.xml': 'xml',
+            '.yaml': 'yaml',
+            '.yml': 'yaml',
+            '.md': 'markdown',
+            '.dockerfile': 'dockerfile',
+            '.vue': 'vue',
+            '.dart': 'dart'
+        };
+        
+        return languageMap[extension] || 'text';
     }
 
     public async handleEditDescription(snippetLine: number, filePath: string) {
@@ -177,6 +233,35 @@ export class SnippetDescriptionLensProvider implements vscode.CodeLensProvider {
             snippet.explanation = '';
             this._onDidChangeCodeLenses.fire();
             this.notifySnippetsUpdated();
+        }
+    }
+
+    public async handleCopySnippet(snippetLine: number, filePath: string) {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        const relativePath = workspaceFolder ? path.relative(workspaceFolder.uri.fsPath, filePath) : filePath;
+        
+        const snippet = this.snippets.find(s => s.relativePath === relativePath && s.range.start.line === snippetLine);
+        if (!snippet) return;
+
+        // Get language based on file extension instead of using snippet.language
+        const language = this.getLanguageFromExtension(snippet.relativePath);
+
+        // Generate markdown content for this specific snippet
+        let markdownContent = `## ${snippet.description}\n\n`;
+        markdownContent += `**File:** \`${snippet.relativePath}\`\n\n`;
+        
+        if (snippet.explanation) {
+            markdownContent += `**Explanation:**\n\n> ${snippet.explanation.replace(/\n/g, '\n> ')}\n\n`;
+        }
+        
+        markdownContent += `**Code:**\n`;
+        markdownContent += '```' + `${language}\n${snippet.code}\n` + '```\n';
+
+        try {
+            await vscode.env.clipboard.writeText(markdownContent);
+            vscode.window.showInformationMessage('Snippet copied to clipboard in markdown format!');
+        } catch (error) {
+            vscode.window.showErrorMessage('Failed to copy snippet to clipboard');
         }
     }
 
