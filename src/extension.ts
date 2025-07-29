@@ -40,11 +40,19 @@ export function activate(context: vscode.ExtensionContext) {
     // Set up two-way communication between snippet manager and description lens provider
     snippetManager.setOnSnippetsChangedCallback((snippets) => {
         snippetDescriptionLensProvider.updateSnippets(snippets);
+        // Update CodeLens provider when snippets change
+        codeLensProvider.setSnippetsLength(snippets.length);
+        // Force refresh of all CodeLens providers
+        vscode.commands.executeCommand('vscode.executeCodeLensProvider');
+        updateClearButtonVisibility();
     });
     
     snippetDescriptionLensProvider.setOnSnippetsUpdatedCallback((snippets) => {
         // Update snippet manager's internal state when changes are made via code lens
         snippetManager.updateSnippetsFromExternal(snippets);
+        // Clear and refresh CodeLens to ensure proper update
+        codeLensProvider.clear();
+        // CodeLens will be updated via the snippetManager callback above
     });
     
     // Set up webview callback for editing snippets
@@ -428,12 +436,16 @@ function handleTextChange(event: vscode.TextDocumentChangeEvent) {
     const filePath = event.document.uri.fsPath;
     snippetManager.handleTextChange(filePath);
     updateClearButtonVisibility();
+    // Update CodeLens provider with new snippet count after text changes
+    codeLensProvider.setSnippetsLength(snippetManager.getSnippetsCount());
+    // Force clear and refresh CodeLens
     codeLensProvider.clear();
+    vscode.commands.executeCommand('vscode.executeCodeLensProvider');
 }
 
 function updateClearButtonVisibility() {
     const count = snippetManager.getSnippetsCount();
-    codeLensProvider.setSnippetsLength(count);
+    // Remove duplicate setSnippetsLength call since it's now handled in the callback
     if (count > 0) {
         clearStatusBarItem.text = `$(clear-all) Snippets (${count})`;
         clearStatusBarItem.tooltip = `Clear ${count} Snippet(s) & All Highlights`;

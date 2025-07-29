@@ -125,10 +125,13 @@ export class SnippetManager {
             const originalSnippetCount = this.snippets.length;
             this.snippets = this.snippets.filter(s => s.relativePath !== relativePath);
             
+            // Always notify when snippets are removed, regardless of count
             if (this.snippets.length < originalSnippetCount) {
                 vscode.window.showWarningMessage(`Snippets cleared from ${path.basename(filePath)} due to document changes.`);
-                this.notifySnippetsChanged();
             }
+            
+            // Always notify about the change to update counters
+            this.notifySnippetsChanged();
 
             const editor = vscode.window.visibleTextEditors.find(e => e.document.uri.fsPath === filePath);
             if (editor) {
@@ -145,6 +148,9 @@ export class SnippetManager {
         if (this.snippets.length < oldSnippetsCount) {
             this.rebuildAllDecorations();
         }
+        
+        // Always notify about changes to update counters
+        this.notifySnippetsChanged();
         
         // Update decorations for all visible editors
         vscode.window.visibleTextEditors.forEach(editor => {

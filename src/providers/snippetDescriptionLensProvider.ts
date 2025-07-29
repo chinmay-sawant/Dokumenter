@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { CodeSnippet } from '../types/types';
 
 export class SnippetDescriptionLensProvider implements vscode.CodeLensProvider {
@@ -17,77 +18,64 @@ export class SnippetDescriptionLensProvider implements vscode.CodeLensProvider {
         this.showEditWebviewCallback = callback;
     }
 
-    public provideCodeLenses(document: vscode.TextDocument, token: vscode.CancellationToken): vscode.CodeLens[] {
-        const lenses: vscode.CodeLens[] = [];
+    public provideCodeLenses(document: vscode.TextDocument): vscode.CodeLens[] {
+        const codeLenses: vscode.CodeLens[] = [];
+        const filePath = document.uri.fsPath;
         
-        // Get workspace folder to match relative paths
-        const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
-        const currentFilePath = workspaceFolder ? 
-            require('path').relative(workspaceFolder.uri.fsPath, document.uri.fsPath) : 
-            document.uri.fsPath;
+        // Get snippets for current file with their global indexes
+        const fileSnippets = this.getSnippetsForFile(filePath);
+        
+        fileSnippets.forEach((snippet, localIndex) => {
+            const globalIndex = this.snippets.indexOf(snippet) + 1; // 1-based index
+            const line = snippet.range.start.line;
+            
+            // Add index number to description display
+            const descriptionText = `📝 [${globalIndex}] ${snippet.description}`;
+            
+            codeLenses.push(new vscode.CodeLens(
+                new vscode.Range(line, 0, line, 0),
+                {
+                    title: descriptionText,
+                    command: '',
+                    tooltip: snippet.explanation || 'No explanation provided'
+                }
+            ));
 
-        // Find snippets for current file
-        const fileSnippets = this.snippets.filter(snippet => snippet.relativePath === currentFilePath);
+            // Edit and Delete buttons with index reference
+            codeLenses.push(new vscode.CodeLens(
+                new vscode.Range(line, 0, line, 0),
+                {
+                    title: '✏️ Edit',
+                    command: 'dokumenter.editDescription',
+                    arguments: [line, filePath]
+                }
+            ));
 
-        for (const snippet of fileSnippets) {
-            // Create lens above the snippet line
-            const lensRange = new vscode.Range(
-                new vscode.Position(snippet.range.start.line, 0),
-                new vscode.Position(snippet.range.start.line, 0)
-            );
+            codeLenses.push(new vscode.CodeLens(
+                new vscode.Range(line, 0, line, 0),
+                {
+                    title: '🗑️ Delete',
+                    command: 'dokumenter.deleteDescription',
+                    arguments: [line, filePath]
+                }
+            ));
+        });
 
-            // Create description lens with larger font and actions
-            const descriptionLens = new vscode.CodeLens(lensRange, {
-                title: `## 📝 ${snippet.description}`,
-                command: ''
-            });
-            lenses.push(descriptionLens);
+        return codeLenses;
+    }
 
-            // Add edit and delete actions for description
-            const editDescriptionLens = new vscode.CodeLens(lensRange, {
-                title: `✏️ Edit`,
-                command: 'dokumenter.editDescription',
-                arguments: [snippet.range.start.line, currentFilePath]
-            });
-            lenses.push(editDescriptionLens);
-
-            const deleteDescriptionLens = new vscode.CodeLens(lensRange, {
-                title: `🗑️ Delete`,
-                command: 'dokumenter.deleteDescription',
-                arguments: [snippet.range.start.line, currentFilePath]
-            });
-            lenses.push(deleteDescriptionLens);
-
-            // Create explanation lens if it exists
-            if (snippet.explanation && snippet.explanation.trim()) {
-                const explanationLens = new vscode.CodeLens(lensRange, {
-                    title: `## 💡 ${snippet.explanation}`,
-                    command: ''
-                });
-                lenses.push(explanationLens);
-
-                // Add edit and delete actions for explanation
-                const editExplanationLens = new vscode.CodeLens(lensRange, {
-                    title: `✏️ Edit Explanation`,
-                    command: 'dokumenter.editExplanation',
-                    arguments: [snippet.range.start.line, currentFilePath]
-                });
-                lenses.push(editExplanationLens);
-
-                const deleteExplanationLens = new vscode.CodeLens(lensRange, {
-                    title: `🗑️ Delete Explanation`,
-                    command: 'dokumenter.deleteExplanation',
-                    arguments: [snippet.range.start.line, currentFilePath]
-                });
-                lenses.push(deleteExplanationLens);
-            }
-        }
-
-        return lenses;
+    private getSnippetsForFile(filePath: string): CodeSnippet[] {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        const relativePath = workspaceFolder ? path.relative(workspaceFolder.uri.fsPath, filePath) : filePath;
+        
+        return this.snippets.filter(snippet => snippet.relativePath === relativePath);
     }
 
     public async handleEditDescription(snippetLine: number, filePath: string) {
-        const snippet = this.snippets.find(s => s.relativePath === filePath && s.range.start.line === snippetLine);
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        const relativePath = workspaceFolder ? path.relative(workspaceFolder.uri.fsPath, filePath) : filePath;
+        
+        const snippet = this.snippets.find(s => s.relativePath === relativePath && s.range.start.line === snippetLine);
         if (!snippet) return;
 
         // If snippet has both description and explanation, show webview panel
@@ -116,7 +104,10 @@ export class SnippetDescriptionLensProvider implements vscode.CodeLensProvider {
     }
 
     public async handleEditExplanation(snippetLine: number, filePath: string) {
-        const snippet = this.snippets.find(s => s.relativePath === filePath && s.range.start.line === snippetLine);
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        const relativePath = workspaceFolder ? path.relative(workspaceFolder.uri.fsPath, filePath) : filePath;
+        
+        const snippet = this.snippets.find(s => s.relativePath === relativePath && s.range.start.line === snippetLine);
         if (!snippet) return;
 
         // Show webview panel for editing explanation with description
@@ -145,7 +136,10 @@ export class SnippetDescriptionLensProvider implements vscode.CodeLensProvider {
     }
 
     public async handleDeleteDescription(snippetLine: number, filePath: string) {
-        const snippet = this.snippets.find(s => s.relativePath === filePath && s.range.start.line === snippetLine);
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        const relativePath = workspaceFolder ? path.relative(workspaceFolder.uri.fsPath, filePath) : filePath;
+        
+        const snippet = this.snippets.find(s => s.relativePath === relativePath && s.range.start.line === snippetLine);
         if (!snippet) return;
 
         const confirm = await vscode.window.showWarningMessage(
@@ -156,7 +150,7 @@ export class SnippetDescriptionLensProvider implements vscode.CodeLensProvider {
 
         if (confirm === 'Delete') {
             // Remove snippet from local array
-            this.snippets = this.snippets.filter(s => !(s.relativePath === filePath && s.range.start.line === snippetLine));
+            this.snippets = this.snippets.filter(s => !(s.relativePath === relativePath && s.range.start.line === snippetLine));
             this._onDidChangeCodeLenses.fire();
             
             // Notify snippet manager to remove highlights and update internal state
@@ -167,7 +161,10 @@ export class SnippetDescriptionLensProvider implements vscode.CodeLensProvider {
     }
 
     public async handleDeleteExplanation(snippetLine: number, filePath: string) {
-        const snippet = this.snippets.find(s => s.relativePath === filePath && s.range.start.line === snippetLine);
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        const relativePath = workspaceFolder ? path.relative(workspaceFolder.uri.fsPath, filePath) : filePath;
+        
+        const snippet = this.snippets.find(s => s.relativePath === relativePath && s.range.start.line === snippetLine);
         if (!snippet) return;
 
         const confirm = await vscode.window.showWarningMessage(
