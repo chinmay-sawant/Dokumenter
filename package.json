@@ -1,7 +1,7 @@
 {
   "name": "code-snippet-collector",
   "publisher": "chinmay-sawant",
-  "displayName": "CodeMark",
+  "displayName": "CodeMemos",
   "description": "Collect and store code snippets with relative paths",
   "version": "1.0.0",
   "engines": {
@@ -23,6 +23,10 @@
         "command": "codeSnippetCollector.clearHighlights",
         "title": "Clear All Highlights",
         "category": "Snippet Collector"
+      },
+      {
+        "command": "myExtension.showInteractiveUI",
+        "title": "Show Interactive UI"
       }
     ],
     "keybindings": [
@@ -45,12 +49,22 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTests.js"
   },
   "devDependencies": {
     "@types/node": "16.x",
     "@types/vscode": "^1.74.0",
-    "typescript": "^4.9.4"
+    "@types/mocha": "^10.0.6",
+    "@typescript-eslint/eslint-plugin": "^7.11.0",
+    "@typescript-eslint/parser": "^7.11.0",
+    "eslint": "^8.57.0",
+    "glob": "^10.4.1",
+    "mocha": "^10.4.0",
+    "typescript": "^5.4.5",
+    "@vscode/test-electron": "^2.3.9"
   },
   "repository": {
     "type": "git",
