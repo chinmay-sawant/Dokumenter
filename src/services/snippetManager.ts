@@ -1,0 +1,169 @@
+import * as vscode from 'vscode';
+import * as path from 'path';
+import { CodeSnippet } from '../types/types';
+
+export class SnippetManager {
+    private snippets: CodeSnippet[] = [];
+    private decorationType: vscode.TextEditorDecorationType;
+    private headingDecorationType: vscode.TextEditorDecorationType;
+    private decorations: Map<string, vscode.DecorationOptions[]> = new Map();
+    private headingDecorations: Map<string, vscode.DecorationOptions[]> = new Map();
+
+    constructor() {
+        this.decorationType = vscode.window.createTextEditorDecorationType({
+            backgroundColor: 'rgba(255, 255, 0, 0.3)',
+            border: '1px solid #cca700',
+        });
+
+        this.headingDecorationType = vscode.window.createTextEditorDecorationType({
+            before: {
+                contentText: '',
+                color: 'rgba(100, 149, 237, 0.8)',
+                fontWeight: 'bold',
+                fontStyle: 'italic',
+                margin: '0 0 0 0',
+            },
+            isWholeLine: false,
+        });
+    }
+
+    public addSnippet(editor: vscode.TextEditor, selection: vscode.Selection, description: string, explanation?: string): void {
+        const document = editor.document;
+        const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+        
+        const snippet: CodeSnippet = {
+            relativePath: workspaceFolder ? path.relative(workspaceFolder.uri.fsPath, document.uri.fsPath) : document.uri.fsPath,
+            code: document.getText(selection),
+            language: document.languageId,
+            description,
+            explanation: explanation || undefined,
+            range: selection
+        };
+
+        this.snippets.push(snippet);
+        this.addHighlight(editor, selection, snippet.description, snippet.explanation);
+    }
+
+    public updateSnippet(index: number, description: string, explanation?: string): void {
+        if (index >= 0 && index < this.snippets.length) {
+            this.snippets[index].description = description;
+            this.snippets[index].explanation = explanation;
+        }
+    }
+
+    public findSnippetAtPosition(filePath: string, position: vscode.Position): { snippet: CodeSnippet; index: number } | null {
+        const fileDecorations = this.decorations.get(filePath) || [];
+        const targetDecoration = fileDecorations.find(deco => deco.range.contains(position));
+        
+        if (!targetDecoration) return null;
+
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        const relativePath = workspaceFolder ? path.relative(workspaceFolder.uri.fsPath, filePath) : filePath;
+        
+        const snippetIndex = this.snippets.findIndex(s => 
+            s.relativePath === relativePath && 
+            s.range.isEqual(targetDecoration.range)
+        );
+
+        return snippetIndex !== -1 ? { snippet: this.snippets[snippetIndex], index: snippetIndex } : null;
+    }
+
+    public getAllSnippets(): CodeSnippet[] {
+        return [...this.snippets];
+    }
+
+    public getSnippetsCount(): number {
+        return this.snippets.length;
+    }
+
+    public clearAll(): void {
+        this.snippets = [];
+        this.decorations.clear();
+        this.headingDecorations.clear();
+        vscode.window.visibleTextEditors.forEach(editor => {
+            editor.setDecorations(this.decorationType, []);
+            editor.setDecorations(this.headingDecorationType, []);
+        });
+    }
+
+    public generateMarkdownContent(): string {
+        let content = `# Code Snippets Collection\n\n*Generated on: ${new Date().toLocaleString()}*\n\n---\n\n`;
+        this.snippets.forEach((snippet) => {
+            content += `## ${snippet.description}\n\n`;
+            content += `**File:** \`${snippet.relativePath}\`\n\n`;
+            if (snippet.explanation) {
+                content += `**Explanation:**\n\n> ${snippet.explanation.replace(/\n/g, '\n> ')}\n\n`;
+            }
+            content += `**Code:**\n`;
+            content += '```' + `${snippet.language}\n${snippet.code}\n` + '```\n\n---\n\n';
+        });
+        return content;
+    }
+
+    public updateDecorationsForEditor(editor: vscode.TextEditor): void {
+        editor.setDecorations(this.decorationType, this.decorations.get(editor.document.uri.fsPath) || []);
+        editor.setDecorations(this.headingDecorationType, this.headingDecorations.get(editor.document.uri.fsPath) || []);
+    }
+
+    private addHighlight(editor: vscode.TextEditor, range: vscode.Range, description: string, explanation?: string): void {
+        const filePath = editor.document.uri.fsPath;
+        if (!this.decorations.has(filePath)) this.decorations.set(filePath, []);
+        this.decorations.get(filePath)!.push({
+            range: range,
+            hoverMessage: new vscode.MarkdownString(`**Saved Snippet:**\n\n> ${description}`)
+        });
+        
+        // Add heading decoration one line above with improved format
+        if (!this.headingDecorations.has(filePath)) this.headingDecorations.set(filePath, []);
+        const headingLine = Math.max(0, range.start.line - 1);
+        const headingRange = new vscode.Range(headingLine, 0, headingLine, 0);
+        
+        // Format title based on whether explanation exists
+        const titleText = explanation ? 
+            `Description: ${description}\nExplanation: ${explanation}` : 
+            `Description: ${description}`;
+        
+        this.headingDecorations.get(filePath)!.push({
+            range: headingRange,
+            renderOptions: {
+                before: {
+                    contentText: `📝 ${titleText}`,
+                    color: 'rgba(100, 149, 237, 0.9)',
+                    fontWeight: 'bold',
+                    fontStyle: 'italic',
+                    margin: '0 0 4px 0',
+                }
+            }
+        });
+        
+        this.updateDecorationsForEditor(editor);
+    }
+
+    public handleTextChange(filePath: string): void {
+        const fileDecorations = this.decorations.get(filePath);
+        if (fileDecorations && fileDecorations.length > 0) {
+            this.decorations.delete(filePath);
+            this.headingDecorations.delete(filePath);
+            
+            const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+            const relativePath = workspaceFolder ? path.relative(workspaceFolder.uri.fsPath, filePath) : filePath;
+            
+            const originalSnippetCount = this.snippets.length;
+            this.snippets = this.snippets.filter(s => s.relativePath !== relativePath);
+            
+            if (this.snippets.length < originalSnippetCount) {
+                vscode.window.showWarningMessage(`Snippets cleared from ${path.basename(filePath)} due to document changes.`);
+            }
+
+            const editor = vscode.window.visibleTextEditors.find(e => e.document.uri.fsPath === filePath);
+            if (editor) {
+                this.updateDecorationsForEditor(editor);
+            }
+        }
+    }
+
+    public dispose(): void {
+        this.decorationType.dispose();
+        this.headingDecorationType.dispose();
+    }
+}
