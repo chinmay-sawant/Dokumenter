@@ -137,6 +137,14 @@ export class SnippetManager {
         }
     }
 
+    public updateSnippetsFromExternal(updatedSnippets: CodeSnippet[]): void {
+        this.snippets = [...updatedSnippets];
+        // Update decorations and other visual elements as needed
+        vscode.window.visibleTextEditors.forEach(editor => {
+            this.updateDecorationsForEditor(editor);
+        });
+    }
+
     private notifySnippetsChanged() {
         if (this.onSnippetsChangedCallback) {
             this.onSnippetsChangedCallback([...this.snippets]);

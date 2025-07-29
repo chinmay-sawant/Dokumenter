@@ -37,9 +37,14 @@ export function activate(context: vscode.ExtensionContext) {
     codeLensProvider = new SnippetCodeLensProvider();
     snippetDescriptionLensProvider = new SnippetDescriptionLensProvider();
     
-    // Set up callback to update description lens provider when snippets change
+    // Set up two-way communication between snippet manager and description lens provider
     snippetManager.setOnSnippetsChangedCallback((snippets) => {
         snippetDescriptionLensProvider.updateSnippets(snippets);
+    });
+    
+    snippetDescriptionLensProvider.setOnSnippetsUpdatedCallback((snippets) => {
+        // Update snippet manager's internal state when changes are made via code lens
+        snippetManager.updateSnippetsFromExternal(snippets);
     });
     
     // --- Register Providers and Commands ---
@@ -52,7 +57,15 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('codeSnippetCollector.cancelAction', cancelAction),
         vscode.commands.registerCommand('codeSnippetCollector.clearAll', clearAll),
         vscode.commands.registerCommand('codeSnippetCollector.quickSaveToFile', quickSaveSnippetsToFile),
-        vscode.commands.registerCommand('codeSnippetCollector.saveAllAs', saveAllAs)
+        vscode.commands.registerCommand('codeSnippetCollector.saveAllAs', saveAllAs),
+        vscode.commands.registerCommand('dokumenter.editDescription', (line: number, filePath: string) => 
+            snippetDescriptionLensProvider.handleEditDescription(line, filePath)),
+        vscode.commands.registerCommand('dokumenter.deleteDescription', (line: number, filePath: string) => 
+            snippetDescriptionLensProvider.handleDeleteDescription(line, filePath)),
+        vscode.commands.registerCommand('dokumenter.editExplanation', (line: number, filePath: string) => 
+            snippetDescriptionLensProvider.handleEditExplanation(line, filePath)),
+        vscode.commands.registerCommand('dokumenter.deleteExplanation', (line: number, filePath: string) => 
+            snippetDescriptionLensProvider.handleDeleteExplanation(line, filePath))
     );
 
     // --- Status Bar ---
