@@ -155,9 +155,14 @@ export class SnippetDescriptionLensProvider implements vscode.CodeLensProvider {
         );
 
         if (confirm === 'Delete') {
+            // Remove snippet from local array
             this.snippets = this.snippets.filter(s => !(s.relativePath === filePath && s.range.start.line === snippetLine));
             this._onDidChangeCodeLenses.fire();
+            
+            // Notify snippet manager to remove highlights and update internal state
             this.notifySnippetsUpdated();
+            
+            vscode.window.showInformationMessage('Snippet deleted successfully!');
         }
     }
 

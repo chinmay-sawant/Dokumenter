@@ -52,7 +52,8 @@
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
-    "test": "node ./out/test/runTests.js"
+    "test": "node ./out/test/runTests.js",
+    "install-local": "vsce package && code --install-extension $(ls *.vsix | head -1) --force && rm *.vsix"
   },
   "devDependencies": {
     "@types/node": "16.x",

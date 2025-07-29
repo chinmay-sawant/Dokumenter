@@ -138,11 +138,58 @@ export class SnippetManager {
     }
 
     public updateSnippetsFromExternal(updatedSnippets: CodeSnippet[]): void {
+        const oldSnippetsCount = this.snippets.length;
         this.snippets = [...updatedSnippets];
-        // Update decorations and other visual elements as needed
+        
+        // If snippets were removed, we need to clean up decorations
+        if (this.snippets.length < oldSnippetsCount) {
+            this.rebuildAllDecorations();
+        }
+        
+        // Update decorations for all visible editors
         vscode.window.visibleTextEditors.forEach(editor => {
             this.updateDecorationsForEditor(editor);
         });
+    }
+
+    private rebuildAllDecorations(): void {
+        // Clear all existing decorations
+        this.decorations.clear();
+        vscode.window.visibleTextEditors.forEach(editor => {
+            editor.setDecorations(this.decorationType, []);
+        });
+
+        // Rebuild decorations from current snippets
+        for (const snippet of this.snippets) {
+            const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+            if (!workspaceFolder) continue;
+
+            const absolutePath = path.resolve(workspaceFolder.uri.fsPath, snippet.relativePath);
+            const editor = vscode.window.visibleTextEditors.find(e => e.document.uri.fsPath === absolutePath);
+            
+            if (editor) {
+                this.addHighlightToEditor(editor, snippet.range, snippet.description, snippet.explanation);
+            }
+        }
+    }
+
+    private addHighlightToEditor(editor: vscode.TextEditor, range: vscode.Range, description: string, explanation?: string): void {
+        const filePath = editor.document.uri.fsPath;
+        if (!this.decorations.has(filePath)) {
+            this.decorations.set(filePath, []);
+        }
+        
+        // Create hover message with description and explanation
+        const hoverText = explanation ? 
+            `**📝 Saved Snippet**\n\n**Description:** ${description}\n\n**Explanation:** ${explanation}` :
+            `**📝 Saved Snippet**\n\n**Description:** ${description}`;
+        
+        this.decorations.get(filePath)!.push({
+            range: range,
+            hoverMessage: new vscode.MarkdownString(hoverText)
+        });
+        
+        this.updateDecorationsForEditor(editor);
     }
 
     private notifySnippetsChanged() {
