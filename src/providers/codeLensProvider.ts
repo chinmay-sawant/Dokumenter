@@ -12,10 +12,11 @@ export class SnippetCodeLensProvider implements vscode.CodeLensProvider {
             return [];
         }
 
-        // Position the CodeLens above the selection to avoid breaking alignment
+        // Position the CodeLens directly on the latest (last) selection line
+        const lastSelection = this.activeSelections[this.activeSelections.length - 1];
         const range = new vscode.Range(
-            new vscode.Position(Math.max(0, this.activeSelections[0].start.line - 2), 0),
-            new vscode.Position(Math.max(0, this.activeSelections[0].start.line - 2), 0)
+            new vscode.Position(lastSelection.start.line, 0),
+            new vscode.Position(lastSelection.start.line, 0)
         );
         
         // --- Snippet-specific actions ---
