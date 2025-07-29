@@ -5,25 +5,12 @@ import { CodeSnippet } from '../types/types';
 export class SnippetManager {
     private snippets: CodeSnippet[] = [];
     private decorationType: vscode.TextEditorDecorationType;
-    private headingDecorationType: vscode.TextEditorDecorationType;
     private decorations: Map<string, vscode.DecorationOptions[]> = new Map();
-    private headingDecorations: Map<string, vscode.DecorationOptions[]> = new Map();
 
     constructor() {
         this.decorationType = vscode.window.createTextEditorDecorationType({
             backgroundColor: 'rgba(255, 255, 0, 0.3)',
             border: '1px solid #cca700',
-        });
-
-        this.headingDecorationType = vscode.window.createTextEditorDecorationType({
-            before: {
-                contentText: '',
-                color: 'rgba(100, 149, 237, 0.8)',
-                fontWeight: 'bold',
-                fontStyle: 'italic',
-                margin: '0 0 0 0',
-            },
-            isWholeLine: false,
         });
     }
 
@@ -79,10 +66,8 @@ export class SnippetManager {
     public clearAll(): void {
         this.snippets = [];
         this.decorations.clear();
-        this.headingDecorations.clear();
         vscode.window.visibleTextEditors.forEach(editor => {
             editor.setDecorations(this.decorationType, []);
-            editor.setDecorations(this.headingDecorationType, []);
         });
     }
 
@@ -102,38 +87,20 @@ export class SnippetManager {
 
     public updateDecorationsForEditor(editor: vscode.TextEditor): void {
         editor.setDecorations(this.decorationType, this.decorations.get(editor.document.uri.fsPath) || []);
-        editor.setDecorations(this.headingDecorationType, this.headingDecorations.get(editor.document.uri.fsPath) || []);
     }
 
     private addHighlight(editor: vscode.TextEditor, range: vscode.Range, description: string, explanation?: string): void {
         const filePath = editor.document.uri.fsPath;
         if (!this.decorations.has(filePath)) this.decorations.set(filePath, []);
+        
+        // Create hover message with description and explanation
+        const hoverText = explanation ? 
+            `**📝 Saved Snippet**\n\n**Description:** ${description}\n\n**Explanation:** ${explanation}` :
+            `**📝 Saved Snippet**\n\n**Description:** ${description}`;
+        
         this.decorations.get(filePath)!.push({
             range: range,
-            hoverMessage: new vscode.MarkdownString(`**Saved Snippet:**\n\n> ${description}`)
-        });
-        
-        // Add heading decoration one line above with improved format
-        if (!this.headingDecorations.has(filePath)) this.headingDecorations.set(filePath, []);
-        const headingLine = Math.max(0, range.start.line - 1);
-        const headingRange = new vscode.Range(headingLine, 0, headingLine, 0);
-        
-        // Format title based on whether explanation exists
-        const titleText = explanation ? 
-            `Description: ${description}\nExplanation: ${explanation}` : 
-            `Description: ${description}`;
-        
-        this.headingDecorations.get(filePath)!.push({
-            range: headingRange,
-            renderOptions: {
-                before: {
-                    contentText: `📝 ${titleText}`,
-                    color: 'rgba(100, 149, 237, 0.9)',
-                    fontWeight: 'bold',
-                    fontStyle: 'italic',
-                    margin: '0 0 4px 0',
-                }
-            }
+            hoverMessage: new vscode.MarkdownString(hoverText)
         });
         
         this.updateDecorationsForEditor(editor);
@@ -143,7 +110,6 @@ export class SnippetManager {
         const fileDecorations = this.decorations.get(filePath);
         if (fileDecorations && fileDecorations.length > 0) {
             this.decorations.delete(filePath);
-            this.headingDecorations.delete(filePath);
             
             const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
             const relativePath = workspaceFolder ? path.relative(workspaceFolder.uri.fsPath, filePath) : filePath;
@@ -164,6 +130,5 @@ export class SnippetManager {
 
     public dispose(): void {
         this.decorationType.dispose();
-        this.headingDecorationType.dispose();
     }
-}
+}             
