@@ -19,6 +19,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { SnippetCodeLensProvider } from './providers/codeLensProvider';
+import { SnippetDescriptionLensProvider } from './providers/snippetDescriptionLensProvider';
 import { SnippetManager } from './services/snippetManager';
 import { getAddSnippetWebviewContent, getUpdateSnippetWebviewContent, getMultiSnippetWebviewContent } from './webview/webviewContent';
 
@@ -26,6 +27,7 @@ import { getAddSnippetWebviewContent, getUpdateSnippetWebviewContent, getMultiSn
 let snippetManager: SnippetManager;
 let clearStatusBarItem: vscode.StatusBarItem;
 let codeLensProvider: SnippetCodeLensProvider;
+let snippetDescriptionLensProvider: SnippetDescriptionLensProvider;
 let selectionDebounce: NodeJS.Timeout | undefined;
 let detailsPanel: vscode.WebviewPanel | undefined;
 
@@ -33,10 +35,17 @@ let detailsPanel: vscode.WebviewPanel | undefined;
 export function activate(context: vscode.ExtensionContext) {
     snippetManager = new SnippetManager();
     codeLensProvider = new SnippetCodeLensProvider();
+    snippetDescriptionLensProvider = new SnippetDescriptionLensProvider();
+    
+    // Set up callback to update description lens provider when snippets change
+    snippetManager.setOnSnippetsChangedCallback((snippets) => {
+        snippetDescriptionLensProvider.updateSnippets(snippets);
+    });
     
     // --- Register Providers and Commands ---
     context.subscriptions.push(
         vscode.languages.registerCodeLensProvider('*', codeLensProvider),
+        vscode.languages.registerCodeLensProvider('*', snippetDescriptionLensProvider),
         vscode.commands.registerCommand('codeSnippetCollector.quickAdd', quickAdd),
         vscode.commands.registerCommand('codeSnippetCollector.addWithDetails', addWithDetails),
         vscode.commands.registerCommand('codeSnippetCollector.updateSnippetDetails', updateSnippetDetails),
@@ -352,6 +361,7 @@ function cancelAction() {
 function clearAll(showMessage = true) {
     snippetManager.clearAll();
     codeLensProvider.setSnippetsLength(0);
+    snippetDescriptionLensProvider.clear();
     updateClearButtonVisibility();
     codeLensProvider.clear();
     if (showMessage) {

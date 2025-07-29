@@ -6,12 +6,17 @@ export class SnippetManager {
     private snippets: CodeSnippet[] = [];
     private decorationType: vscode.TextEditorDecorationType;
     private decorations: Map<string, vscode.DecorationOptions[]> = new Map();
+    private onSnippetsChangedCallback?: (snippets: CodeSnippet[]) => void;
 
     constructor() {
         this.decorationType = vscode.window.createTextEditorDecorationType({
             backgroundColor: 'rgba(255, 255, 0, 0.3)',
             border: '1px solid #cca700',
         });
+    }
+
+    public setOnSnippetsChangedCallback(callback: (snippets: CodeSnippet[]) => void) {
+        this.onSnippetsChangedCallback = callback;
     }
 
     public addSnippet(editor: vscode.TextEditor, selection: vscode.Selection, description: string, explanation?: string): void {
@@ -29,12 +34,14 @@ export class SnippetManager {
 
         this.snippets.push(snippet);
         this.addHighlight(editor, selection, snippet.description, snippet.explanation);
+        this.notifySnippetsChanged();
     }
 
     public updateSnippet(index: number, description: string, explanation?: string): void {
         if (index >= 0 && index < this.snippets.length) {
             this.snippets[index].description = description;
             this.snippets[index].explanation = explanation;
+            this.notifySnippetsChanged();
         }
     }
 
@@ -69,6 +76,7 @@ export class SnippetManager {
         vscode.window.visibleTextEditors.forEach(editor => {
             editor.setDecorations(this.decorationType, []);
         });
+        this.notifySnippetsChanged();
     }
 
     public generateMarkdownContent(): string {
@@ -119,6 +127,7 @@ export class SnippetManager {
             
             if (this.snippets.length < originalSnippetCount) {
                 vscode.window.showWarningMessage(`Snippets cleared from ${path.basename(filePath)} due to document changes.`);
+                this.notifySnippetsChanged();
             }
 
             const editor = vscode.window.visibleTextEditors.find(e => e.document.uri.fsPath === filePath);
@@ -128,7 +137,13 @@ export class SnippetManager {
         }
     }
 
+    private notifySnippetsChanged() {
+        if (this.onSnippetsChangedCallback) {
+            this.onSnippetsChangedCallback([...this.snippets]);
+        }
+    }
+
     public dispose(): void {
         this.decorationType.dispose();
     }
-}             
+}
