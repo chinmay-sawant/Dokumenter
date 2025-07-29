@@ -85,64 +85,308 @@ export function activate(context: vscode.ExtensionContext) {
 // --- CodeLens-Triggered Commands ---
 
 /** 1. Quick Add: Asks only for description. */
-async function quickAdd(selection: vscode.Selection) {
+async function quickAdd(selections: vscode.Selection | vscode.Selection[]) {
     codeLensProvider.clear();
     const editor = vscode.window.activeTextEditor;
     if (!editor) return;
 
-    const description = await vscode.window.showInputBox({
-        prompt: "Enter a brief description for this snippet",
-        placeHolder: `e.g., Function to parse user data`,
-    });
+    const selectionsArray = Array.isArray(selections) ? selections : [selections];
+    
+    if (selectionsArray.length === 1) {
+        const description = await vscode.window.showInputBox({
+            prompt: "Enter a brief description for this snippet",
+            placeHolder: `e.g., Function to parse user data`,
+        });
 
-    if (description) {
-        await processSnippet(editor, selection, description, {});
+        if (description) {
+            await processSnippet(editor, selectionsArray[0], description, {});
+        }
+    } else {
+        // Multiple selections - ask for a common description or individual descriptions
+        const choice = await vscode.window.showQuickPick([
+            { label: 'Same description for all', value: 'common' },
+            { label: 'Individual descriptions', value: 'individual' }
+        ], { placeHolder: `You have ${selectionsArray.length} selections. How would you like to describe them?` });
+
+        if (!choice) return;
+
+        if (choice.value === 'common') {
+            const description = await vscode.window.showInputBox({
+                prompt: `Enter a description for all ${selectionsArray.length} snippets`,
+                placeHolder: `e.g., Related utility functions`,
+            });
+
+            if (description) {
+                for (let i = 0; i < selectionsArray.length; i++) {
+                    const numberedDescription = selectionsArray.length > 1 ? `${description} (${i + 1}/${selectionsArray.length})` : description;
+                    await processSnippet(editor, selectionsArray[i], numberedDescription, {});
+                }
+            }
+        } else {
+            for (let i = 0; i < selectionsArray.length; i++) {
+                const description = await vscode.window.showInputBox({
+                    prompt: `Enter description for snippet ${i + 1} of ${selectionsArray.length}`,
+                    placeHolder: `e.g., Helper function for validation`,
+                });
+
+                if (description) {
+                    await processSnippet(editor, selectionsArray[i], description, {});
+                } else {
+                    break; // User cancelled, stop processing remaining selections
+                }
+            }
+        }
     }
 }
 
 /** 2. Add with Details: Opens a webview for description and explanation. */
-async function addWithDetails(selection: vscode.Selection) {
+async function addWithDetails(selections: vscode.Selection | vscode.Selection[]) {
     codeLensProvider.clear();
     const editor = vscode.window.activeTextEditor;
     if (!editor) { return; }
 
-    const column = editor.viewColumn ? editor.viewColumn + 1 : vscode.ViewColumn.Two;
+    const selectionsArray = Array.isArray(selections) ? selections : [selections];
 
-    if (detailsPanel) {
-        detailsPanel.reveal(column);
-        return;
+    if (selectionsArray.length === 1) {
+        await showDetailsPanel(editor, selectionsArray[0]);
+    } else {
+        await showMultiDetailsPanel(editor, selectionsArray);
     }
+}
 
-    detailsPanel = vscode.window.createWebviewPanel(
-        'addSnippetDetails',
-        'Add Snippet Details',
-        column,
-        { enableScripts: true }
-    );
-    
-    detailsPanel.webview.html = getWebviewContent(editor.document.getText(selection));
-    
-    // Handle messages from the webview
-    detailsPanel.webview.onDidReceiveMessage(
-        async message => {
-            switch (message.command) {
-                case 'save':
-                    await processSnippet(editor, selection, message.description, { explanation: message.explanation });
-                    detailsPanel?.dispose();
-                    return;
-                case 'cancel':
-                    detailsPanel?.dispose();
-                    return;
-            }
-        },
-        undefined,
-        [] // Disposables
-    );
+/** Shows the details panel for a single snippet selection. */
+async function showDetailsPanel(editor: vscode.TextEditor, selection: vscode.Selection) {
+    return new Promise<void>((resolve) => {
+        const column = editor.viewColumn ? editor.viewColumn + 1 : vscode.ViewColumn.Two;
+        if (detailsPanel) detailsPanel.dispose();
 
-    // Reset the panel variable when the user closes it
-    detailsPanel.onDidDispose(() => {
-        detailsPanel = undefined;
-    }, null, []);
+        detailsPanel = vscode.window.createWebviewPanel(
+            'addSnippetDetails',
+            'Add Snippet Details',
+            column,
+            { enableScripts: true }
+        );
+
+        const selectedCode = editor.document.getText(selection);
+        detailsPanel.webview.html = getWebviewContent(selectedCode);
+
+        detailsPanel.webview.onDidReceiveMessage(
+            async message => {
+                switch (message.command) {
+                    case 'save':
+                        if (message.description) {
+                            await processSnippet(editor, selection, message.description, { explanation: message.explanation });
+                        }
+                        detailsPanel?.dispose();
+                        resolve();
+                        return;
+                    case 'cancel':
+                        detailsPanel?.dispose();
+                        resolve();
+                        return;
+                }
+            },
+            undefined,
+            []
+        );
+
+        detailsPanel.onDidDispose(() => {
+            detailsPanel = undefined;
+            resolve();
+        }, null, []);
+    });
+}
+
+
+async function showMultiDetailsPanel(editor: vscode.TextEditor, selections: vscode.Selection[]) {
+    return new Promise<void>((resolve) => {
+        const column = editor.viewColumn ? editor.viewColumn + 1 : vscode.ViewColumn.Two;
+        if (detailsPanel) detailsPanel.dispose();
+
+        detailsPanel = vscode.window.createWebviewPanel(
+            'addMultiSnippetDetails',
+            `Add Multiple Snippet Details (${selections.length})`,
+            column,
+            { enableScripts: true }
+        );
+
+        detailsPanel.webview.html = getMultiWebviewContent(editor, selections);
+
+        detailsPanel.webview.onDidReceiveMessage(
+            async message => {
+                switch (message.command) {
+                    case 'save':
+                        for (let i = 0; i < selections.length; i++) {
+                            const desc = message.descriptions[i];
+                            const expl = message.explanations[i];
+                            if (desc) {
+                                await processSnippet(editor, selections[i], desc, { explanation: expl });
+                            }
+                        }
+                        detailsPanel?.dispose();
+                        resolve();
+                        return;
+                    case 'cancel':
+                        detailsPanel?.dispose();
+                        resolve();
+                        return;
+                }
+            },
+            undefined,
+            []
+        );
+
+        detailsPanel.onDidDispose(() => {
+            detailsPanel = undefined;
+            resolve();
+        }, null, []);
+    });
+}
+
+function getMultiWebviewContent(editor: vscode.TextEditor, selections: vscode.Selection[]): string {
+    let blocks = '';
+    for (let i = 0; i < selections.length; i++) {
+        const code = escapeHtml(editor.document.getText(selections[i]));
+        blocks += `
+        <div class="snippet-block">
+            <h3>Snippet ${i + 1} Preview</h3>
+            <pre class="code-block"><code>${code}</code></pre>
+            <label for="desc${i}">Description (Required)</label>
+            <input type="text" id="desc${i}" placeholder="e.g., Description for snippet ${i + 1}" required />
+            <label for="expl${i}">Explanation (Optional)</label>
+            <textarea id="expl${i}" placeholder="Explanation for snippet ${i + 1}"></textarea>
+        </div>
+        <hr/>
+        `;
+    }
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Multiple Snippet Details</title>
+    <style>
+        body {
+            font-family: var(--vscode-font-family);
+            color: var(--vscode-editor-foreground);
+            background-color: var(--vscode-editor-background);
+            padding: 1.2rem;
+        }
+        h1 {
+            color: var(--vscode-side-bar-title-foreground);
+            border-bottom: 1px solid var(--vscode-text-separator-foreground);
+            padding-bottom: 0.5rem;
+            margin-top: 0;
+        }
+        .snippet-block {
+            margin-bottom: 1.5rem;
+        }
+        h3 {
+            margin-bottom: 0.5rem;
+        }
+        label {
+            display: block;
+            margin-top: 1rem;
+            margin-bottom: 0.3rem;
+            font-weight: bold;
+        }
+        input[type="text"], textarea {
+            width: 95%;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid var(--vscode-input-border);
+            background-color: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            font-family: var(--vscode-font-family);
+        }
+        textarea {
+            height: 80px;
+            resize: vertical;
+        }
+        .code-block {
+            background-color: var(--vscode-text-block-quote-background);
+            border: 1px solid var(--vscode-text-block-quote-border);
+            padding: 10px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: var(--vscode-editor-font-family);
+            max-height: 120px;
+            overflow-y: auto;
+        }
+        .buttons {
+            margin-top: 1.5rem;
+            display: flex;
+            gap: 0.5rem;
+        }
+        button {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 1em;
+        }
+        .save-button {
+            background-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+        }
+        .save-button:hover {
+            background-color: var(--vscode-button-hoverBackground);
+        }
+        .cancel-button {
+            background-color: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
+        }
+        .cancel-button:hover {
+            background-color: var(--vscode-button-secondaryHoverBackground);
+        }
+        hr {
+            border: none;
+            border-top: 1px solid var(--vscode-text-separator-foreground);
+            margin: 2rem 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Add Multiple Snippet Details</h1>
+    ${blocks}
+    <div class="buttons">
+        <button class="save-button">Save All Snippets</button>
+        <button type="button" class="cancel-button">Cancel</button>
+    </div>
+    <script>
+        (function() {
+            const vscode = acquireVsCodeApi();
+            const saveButton = document.querySelector('.save-button');
+            const cancelButton = document.querySelector('.cancel-button');
+            saveButton.addEventListener('click', () => {
+                const descriptions = [];
+                const explanations = [];
+                let valid = true;
+                ${selections.map((_, i) => `
+                const desc${i} = document.getElementById('desc${i}').value;
+                if (!desc${i}) {
+                    document.getElementById('desc${i}').focus();
+                    valid = false;
+                }
+                descriptions.push(desc${i});
+                explanations.push(document.getElementById('expl${i}').value);
+                `).join('\n')}
+                if (!valid) return;
+                vscode.postMessage({
+                    command: 'save',
+                    descriptions: descriptions,
+                    explanations: explanations
+                });
+            });
+            cancelButton.addEventListener('click', () => {
+                vscode.postMessage({ command: 'cancel' });
+            });
+        }());
+    </script>
+</body>
+</html>`;
 }
 
 /** 3. Quick Save: Saves all snippets to an auto-generated file. */
@@ -220,19 +464,22 @@ class SnippetCodeLensProvider implements vscode.CodeLensProvider {
     private _onDidChangeCodeLenses: vscode.EventEmitter<void> = new vscode.EventEmitter<void>();
     public readonly onDidChangeCodeLenses: vscode.Event<void> = this._onDidChangeCodeLenses.event;
 
-    private activeSelection: vscode.Selection | undefined;
+    private activeSelections: vscode.Selection[] = [];
 
     public provideCodeLenses(document: vscode.TextDocument): vscode.CodeLens[] {
-        if (!this.activeSelection || vscode.window.activeTextEditor?.document.uri.toString() !== document.uri.toString()) {
+        if (this.activeSelections.length === 0 || vscode.window.activeTextEditor?.document.uri.toString() !== document.uri.toString()) {
             return [];
         }
 
-        const range = new vscode.Range(this.activeSelection.start, this.activeSelection.start);
+        const range = new vscode.Range(this.activeSelections[0].start, this.activeSelections[0].start);
         
         // --- Snippet-specific actions ---
+        const selectionCount = this.activeSelections.length;
+        const selectionText = selectionCount > 1 ? ` (${selectionCount} selections)` : '';
+        
         const lenses: vscode.CodeLens[] = [
-            new vscode.CodeLens(range, { title: "⚡ Quick Add", command: 'codeSnippetCollector.quickAdd', arguments: [this.activeSelection]}),
-            new vscode.CodeLens(range, { title: "＋ Add with Details", command: 'codeSnippetCollector.addWithDetails', arguments: [this.activeSelection]}),
+            new vscode.CodeLens(range, { title: `⚡ Quick Add${selectionText}`, command: 'codeSnippetCollector.quickAdd', arguments: [this.activeSelections]}),
+            new vscode.CodeLens(range, { title: `＋ Add with Details${selectionText}`, command: 'codeSnippetCollector.addWithDetails', arguments: [this.activeSelections]}),
         ];
 
         // --- Collection-level actions (only show if snippets exist) ---
@@ -248,13 +495,13 @@ class SnippetCodeLensProvider implements vscode.CodeLensProvider {
         return lenses;
     }
 
-    public update(selection: vscode.Selection) {
-        this.activeSelection = selection;
+    public update(selections: vscode.Selection[]) {
+        this.activeSelections = selections.filter(selection => !selection.isEmpty);
         this._onDidChangeCodeLenses.fire();
     }
 
     public clear() {
-        this.activeSelection = undefined;
+        this.activeSelections = [];
         this._onDidChangeCodeLenses.fire();
     }
 }
@@ -262,21 +509,28 @@ class SnippetCodeLensProvider implements vscode.CodeLensProvider {
 function handleSelectionChange(event: vscode.TextEditorSelectionChangeEvent) {
     if (selectionDebounce) clearTimeout(selectionDebounce);
     
-    const selection = event.selections[0];
-    if (selection.isEmpty) {
+    const nonEmptySelections = event.selections.filter(selection => !selection.isEmpty);
+    
+    if (nonEmptySelections.length === 0) {
         codeLensProvider.clear();
         return;
     }
     
+    // Check if any selection overlaps with existing decorations
     const fileDecorations = decorations.get(event.textEditor.document.uri.fsPath) || [];
-    if (fileDecorations.some(deco => deco.range.contains(selection))) {
+    const hasOverlap = nonEmptySelections.some(selection => 
+        fileDecorations.some(deco => deco.range.contains(selection) || selection.contains(deco.range))
+    );
+    
+    if (hasOverlap) {
         codeLensProvider.clear();
         return;
     }
 
     selectionDebounce = setTimeout(() => {
-        if (!event.textEditor.selection.isEmpty) {
-            codeLensProvider.update(selection);
+        const currentNonEmptySelections = event.textEditor.selections.filter(selection => !selection.isEmpty);
+        if (currentNonEmptySelections.length > 0) {
+            codeLensProvider.update(currentNonEmptySelections);
         }
     }, 300);
 }
@@ -444,7 +698,7 @@ async function processSnippet(editor: vscode.TextEditor, selection: vscode.Selec
     snippets.push(snippet);
     addHighlight(editor, selection, snippet.description);
     vscode.window.showInformationMessage(`Snippet saved! Total in collection: ${snippets.length}`);
-    codeLensProvider.update(selection); // Refresh lenses to show collection actions
+    codeLensProvider.update([selection]); // Refresh lenses to show collection actions
 }
 
 async function saveAndFinalize(fileUri: vscode.Uri) {
