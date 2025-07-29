@@ -7,9 +7,14 @@ export class SnippetDescriptionLensProvider implements vscode.CodeLensProvider {
 
     private snippets: CodeSnippet[] = [];
     private onSnippetsUpdatedCallback?: (snippets: CodeSnippet[]) => void;
+    private showEditWebviewCallback?: (snippet: CodeSnippet, onSave: (description: string, explanation?: string) => void) => void;
 
     public setOnSnippetsUpdatedCallback(callback: (snippets: CodeSnippet[]) => void) {
         this.onSnippetsUpdatedCallback = callback;
+    }
+
+    public setShowEditWebviewCallback(callback: (snippet: CodeSnippet, onSave: (description: string, explanation?: string) => void) => void) {
+        this.showEditWebviewCallback = callback;
     }
 
     public provideCodeLenses(document: vscode.TextDocument, token: vscode.CancellationToken): vscode.CodeLens[] {
@@ -85,6 +90,18 @@ export class SnippetDescriptionLensProvider implements vscode.CodeLensProvider {
         const snippet = this.snippets.find(s => s.relativePath === filePath && s.range.start.line === snippetLine);
         if (!snippet) return;
 
+        // If snippet has both description and explanation, show webview panel
+        if (snippet.explanation && snippet.explanation.trim() && this.showEditWebviewCallback) {
+            this.showEditWebviewCallback(snippet, (newDescription: string, newExplanation?: string) => {
+                snippet.description = newDescription;
+                snippet.explanation = newExplanation;
+                this._onDidChangeCodeLenses.fire();
+                this.notifySnippetsUpdated();
+            });
+            return;
+        }
+
+        // Otherwise, show simple input box for description only
         const newDescription = await vscode.window.showInputBox({
             prompt: 'Edit description',
             value: snippet.description,
@@ -102,6 +119,18 @@ export class SnippetDescriptionLensProvider implements vscode.CodeLensProvider {
         const snippet = this.snippets.find(s => s.relativePath === filePath && s.range.start.line === snippetLine);
         if (!snippet) return;
 
+        // Show webview panel for editing explanation with description
+        if (this.showEditWebviewCallback) {
+            this.showEditWebviewCallback(snippet, (newDescription: string, newExplanation?: string) => {
+                snippet.description = newDescription;
+                snippet.explanation = newExplanation;
+                this._onDidChangeCodeLenses.fire();
+                this.notifySnippetsUpdated();
+            });
+            return;
+        }
+
+        // Fallback to simple input box
         const newExplanation = await vscode.window.showInputBox({
             prompt: 'Edit explanation',
             value: snippet.explanation || '',

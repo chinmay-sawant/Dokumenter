@@ -21,7 +21,7 @@ import * as fs from 'fs';
 import { SnippetCodeLensProvider } from './providers/codeLensProvider';
 import { SnippetDescriptionLensProvider } from './providers/snippetDescriptionLensProvider';
 import { SnippetManager } from './services/snippetManager';
-import { getAddSnippetWebviewContent, getUpdateSnippetWebviewContent, getMultiSnippetWebviewContent } from './webview/webviewContent';
+import { getAddSnippetWebviewContent, getUpdateSnippetWebviewContent, getMultiSnippetWebviewContent, getEditSnippetWebviewContent } from './webview/webviewContent';
 
 // --- Global State ---
 let snippetManager: SnippetManager;
@@ -45,6 +45,11 @@ export function activate(context: vscode.ExtensionContext) {
     snippetDescriptionLensProvider.setOnSnippetsUpdatedCallback((snippets) => {
         // Update snippet manager's internal state when changes are made via code lens
         snippetManager.updateSnippetsFromExternal(snippets);
+    });
+    
+    // Set up webview callback for editing snippets
+    snippetDescriptionLensProvider.setShowEditWebviewCallback((snippet, onSave) => {
+        showEditPanel(snippet, onSave);
     });
     
     // --- Register Providers and Commands ---
@@ -442,4 +447,52 @@ export function deactivate() {
     if (selectionDebounce) clearTimeout(selectionDebounce);
     if (detailsPanel) detailsPanel.dispose();
     if (snippetManager) snippetManager.dispose();
+}
+
+async function showEditPanel(snippet: any, onSave: (description: string, explanation?: string) => void) {
+    return new Promise<void>((resolve) => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            resolve();
+            return;
+        }
+
+        const column = editor.viewColumn ? editor.viewColumn + 1 : vscode.ViewColumn.Two;
+        if (detailsPanel) detailsPanel.dispose();
+
+        detailsPanel = vscode.window.createWebviewPanel(
+            'editSnippetDetails',
+            'Edit Snippet Details',
+            column,
+            { enableScripts: true }
+        );
+
+        detailsPanel.webview.html = getEditSnippetWebviewContent(snippet);
+
+        detailsPanel.webview.onDidReceiveMessage(
+            async message => {
+                switch (message.command) {
+                    case 'save':
+                        if (message.description) {
+                            onSave(message.description, message.explanation);
+                            vscode.window.showInformationMessage('Snippet details updated successfully!');
+                        }
+                        detailsPanel?.dispose();
+                        resolve();
+                        return;
+                    case 'cancel':
+                        detailsPanel?.dispose();
+                        resolve();
+                        return;
+                }
+            },
+            undefined,
+            []
+        );
+
+        detailsPanel.onDidDispose(() => {
+            detailsPanel = undefined;
+            resolve();
+        }, null, []);
+    });
 }
