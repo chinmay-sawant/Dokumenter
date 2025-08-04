@@ -1,6 +1,6 @@
 @echo off
 echo Packaging extension...
-call vsce package
+call npx @vscode/vsce package
 
 echo Finding .vsix file...
 for %%f in (*.vsix) do (

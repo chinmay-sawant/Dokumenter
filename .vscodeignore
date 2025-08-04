@@ -1,0 +1,10 @@
+node_modules
+.vscode
+*.bat
+*.log
+*.md
+*.ts
+src
+test
+.vscodeignore
+tsconfig.json
