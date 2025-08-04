@@ -81,15 +81,46 @@ export class SnippetManager {
 
     public generateMarkdownContent(): string {
         let content = `# Code Snippets Collection\n\n*Generated on: ${new Date().toLocaleString()}*\n\n---\n\n`;
+        
+        // Group snippets by file and description
+        const groupedSnippets = new Map<string, CodeSnippet[]>();
+        
         this.snippets.forEach((snippet) => {
-            content += `## ${snippet.description}\n\n`;
-            content += `**File:** \`${snippet.relativePath}\`\n\n`;
-            if (snippet.explanation) {
-                content += `**Explanation:**\n\n> ${snippet.explanation.replace(/\n/g, '\n> ')}\n\n`;
+            const key = `${snippet.relativePath}::${snippet.description}`;
+            if (!groupedSnippets.has(key)) {
+                groupedSnippets.set(key, []);
             }
-            content += `**Code:**\n`;
-            content += '```' + `${snippet.language}\n${snippet.code}\n` + '```\n\n---\n\n';
+            groupedSnippets.get(key)!.push(snippet);
         });
+        
+        // Process each group
+        groupedSnippets.forEach((snippetGroup) => {
+            const firstSnippet = snippetGroup[0];
+            const isMultiple = snippetGroup.length > 1;
+            
+            // Title with count for multiple snippets
+            const title = isMultiple 
+                ? `${firstSnippet.description} Total - ${snippetGroup.length}`
+                : firstSnippet.description;
+                
+            content += `## ${title}\n\n`;
+            content += `**File:** \`${firstSnippet.relativePath}\`\n\n`;
+            
+            // Add explanation if exists (only show once for grouped snippets)
+            if (firstSnippet.explanation) {
+                content += `**Explanation:**\n\n> ${firstSnippet.explanation.replace(/\n/g, '\n> ')}\n\n`;
+            }
+            
+            content += `**Code:**\n`;
+            content += '```' + `${firstSnippet.language}\n`;
+            
+            // Combine code from all snippets in the group
+            const combinedCode = snippetGroup.map(snippet => snippet.code).join('\n');
+            content += `${combinedCode}\n`;
+            
+            content += '```\n\n---\n\n';
+        });
+        
         return content;
     }
 

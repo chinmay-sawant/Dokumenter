@@ -146,9 +146,9 @@ async function quickAdd(selections: vscode.Selection | vscode.Selection[]) {
             });
 
             if (description) {
+                // Store all snippets with the same base description (no numbering)
                 for (let i = 0; i < selectionsArray.length; i++) {
-                    const numberedDescription = selectionsArray.length > 1 ? `${description} (${i + 1}/${selectionsArray.length})` : description;
-                    snippetManager.addSnippet(editor, selectionsArray[i], numberedDescription);
+                    snippetManager.addSnippet(editor, selectionsArray[i], description);
                 }
                 vscode.window.showInformationMessage(`${selectionsArray.length} snippets saved! Total in collection: ${snippetManager.getSnippetsCount()}`);
                 updateClearButtonVisibility();
