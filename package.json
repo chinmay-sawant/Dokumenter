@@ -3,7 +3,7 @@
   "publisher": "chinmay-sawant",
   "displayName": "CodeMemos",
   "description": "Collect and store code snippets with relative paths",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "engines": {
     "vscode": "^1.74.0"
   },

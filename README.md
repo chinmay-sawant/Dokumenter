@@ -7,6 +7,9 @@ This plugin was created as I have to go through 40+ GO microservices for which c
 CodeMark helps you collect and store code snippets from any file in your workspace, along with their relative paths, descriptions, and explanations. It streamlines the process of documenting code, making it easy to generate markdown documentation with just a few clicks.
 
 ---
+![Sample Usecase](https://github.com/chinmay-sawant/CodeMapper/blob/master/screenshots/demov2.gif)
+
+---
 
 ## Features
 
