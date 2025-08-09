@@ -243,23 +243,53 @@ export class SnippetDescriptionLensProvider implements vscode.CodeLensProvider {
         const snippet = this.snippets.find(s => s.relativePath === relativePath && s.range.start.line === snippetLine);
         if (!snippet) return;
 
+        // Find all snippets with the same description and file
+        const relatedSnippets = this.snippets.filter(s => 
+            s.relativePath === snippet.relativePath && 
+            s.description === snippet.description
+        );
+
         // Get language based on file extension instead of using snippet.language
         const language = this.getLanguageFromExtension(snippet.relativePath);
 
-        // Generate markdown content for this specific snippet
-        let markdownContent = `## ${snippet.description}\n\n`;
-        markdownContent += `**File:** \`${snippet.relativePath}\`\n\n`;
+        // Generate markdown content
+        let markdownContent = '';
         
-        if (snippet.explanation) {
-            markdownContent += `**Explanation:**\n\n> ${snippet.explanation.replace(/\n/g, '\n> ')}\n\n`;
+        if (relatedSnippets.length > 1) {
+            // Multiple snippets with same description - group them
+            markdownContent += `## ${snippet.description} Total - ${relatedSnippets.length}\n\n`;
+            markdownContent += `**File:** \`${snippet.relativePath}\`\n\n`;
+            
+            if (snippet.explanation) {
+                markdownContent += `**Explanation:**\n\n> ${snippet.explanation.replace(/\n/g, '\n> ')}\n\n`;
+            }
+            
+            markdownContent += `**Code:**\n`;
+            markdownContent += '```' + `${language}\n`;
+            
+            // Combine code from all related snippets
+            const combinedCode = relatedSnippets.map(s => s.code).join('\n');
+            markdownContent += `${combinedCode}\n`;
+            markdownContent += '```\n';
+        } else {
+            // Single snippet - use original format
+            markdownContent += `## ${snippet.description}\n\n`;
+            markdownContent += `**File:** \`${snippet.relativePath}\`\n\n`;
+            
+            if (snippet.explanation) {
+                markdownContent += `**Explanation:**\n\n> ${snippet.explanation.replace(/\n/g, '\n> ')}\n\n`;
+            }
+            
+            markdownContent += `**Code:**\n`;
+            markdownContent += '```' + `${language}\n${snippet.code}\n` + '```\n';
         }
-        
-        markdownContent += `**Code:**\n`;
-        markdownContent += '```' + `${language}\n${snippet.code}\n` + '```\n';
 
         try {
             await vscode.env.clipboard.writeText(markdownContent);
-            vscode.window.showInformationMessage('Snippet copied to clipboard in markdown format!');
+            const message = relatedSnippets.length > 1 
+                ? `${relatedSnippets.length} grouped snippets copied to clipboard in markdown format!`
+                : 'Snippet copied to clipboard in markdown format!';
+            vscode.window.showInformationMessage(message);
         } catch (error) {
             vscode.window.showErrorMessage('Failed to copy snippet to clipboard');
         }
