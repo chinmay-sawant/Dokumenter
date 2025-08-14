@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>CodeMark | Code Snippet Collector</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3Ctext y='50%25' x='50%25' dominant-baseline='middle' text-anchor='middle' font-size='140'%3E💾%3C/text%3E%3C/svg%3E"
+    />
+    <meta
+      name="description"
+      content="CodeMark: Collect, describe and export code snippets from your VS Code workspace."
+    />
+  </head>
+  <body>
+    <header class="site-header">
+      <h1 class="logo">CodeMark <span class="version-badge">v1.0.1</span></h1>
+      <nav class="top-nav">
+        <a href="#features">Features</a>
+        <a href="#usage">Usage</a>
+        <a href="#commands">Commands</a>
+        <a href="#demo">Demo</a>
+        <a href="#install">Install</a>
+        <button
+          id="themeToggle"
+          class="theme-toggle"
+          aria-label="Toggle color theme"
+          title="Toggle light/dark"
+        >
+          <span class="icon-light" role="img" aria-hidden="true">🌙</span>
+          <span class="icon-dark" role="img" aria-hidden="true">☀️</span>
+        </button>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <h2>Collect. Explain. Export.</h2>
+        <p class="tagline">
+          Save highlighted code snippets with descriptions & explanations, then
+          export beautiful markdown instantly.
+        </p>
+        <div class="cta-row">
+          <a
+            class="btn primary"
+            href="https://marketplace.visualstudio.com/items?itemName=chinmay-sawant.code-snippet-collector"
+            target="_blank"
+            rel="noopener"
+            >Get Extension</a
+          >
+          <a
+            class="btn"
+            href="https://github.com/chinmay-sawant/Dokumenter"
+            target="_blank"
+            rel="noopener"
+            >GitHub Repo</a
+          >
+        </div>
+      </section>
+
+      <section id="demo" class="panel">
+        <h3>Live Demo</h3>
+        <div class="demo-wrapper">
+          <div id="gifLoader" class="loader">
+            <div class="spinner" aria-hidden="true"></div>
+            <p>Loading demo…</p>
+          </div>
+          <img
+            id="demoGif"
+            class="demo-gif"
+            src="https://github.com/chinmay-sawant/Dokumenter/raw/master/screenshots/demov2.gif"
+            alt="Animated demonstration of CodeMark workflow"
+            loading="eager"
+            decoding="async"
+            style="opacity: 0"
+          />
+        </div>
+      </section>
+
+      <section id="features" class="panel">
+        <h3>Features</h3>
+        <ul class="feature-list">
+          <li>Quick or detailed snippet capture</li>
+          <li>Inline CodeLens actions</li>
+          <li>Explanation & description support</li>
+          <li>Grouped markdown export</li>
+          <li>Status bar snippet counter</li>
+          <li>Multi-selection handling</li>
+          <li>Dark / light theme friendly</li>
+        </ul>
+      </section>
+
+      <section id="usage" class="panel">
+        <h3>Usage</h3>
+        <ol class="steps">
+          <li>Select code in VS Code</li>
+          <li>Use CodeLens: Quick Add or Add with Details</li>
+          <li>Repeat & group related snippets</li>
+          <li>Export to markdown (auto or custom name)</li>
+          <li>Share or commit generated documentation</li>
+        </ol>
+      </section>
+
+      <section id="commands" class="panel">
+        <h3>Core Commands</h3>
+        <div class="grid">
+          <div class="cmd">
+            <code>Quick Add</code><span>Fast snippet + description</span>
+          </div>
+          <div class="cmd">
+            <code>Add with Details</code><span>Description + explanation</span>
+          </div>
+          <div class="cmd">
+            <code>Quick Save All</code><span>Auto markdown export</span>
+          </div>
+          <div class="cmd">
+            <code>Save All As...</code><span>Choose file path</span>
+          </div>
+          <div class="cmd">
+            <code>Clear All</code><span>Remove snippets & highlights</span>
+          </div>
+          <div class="cmd">
+            <code>Cancel</code><span>Hide transient UI</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="install" class="panel">
+        <h3>Installation</h3>
+        <p>You can install CodeMark using any of the following methods:</p>
+        <ol>
+          <li>
+            Direct from the Marketplace:
+            <a
+              href="https://marketplace.visualstudio.com/items?itemName=chinmay-sawant.code-snippet-collector"
+              target="_blank"
+              rel="noopener"
+            >
+              https://marketplace.visualstudio.com/items?itemName=chinmay-sawant.code-snippet-collector
+            </a>
+          </li>
+          <li>
+            Via VS Code Extensions view:
+            <br />
+            Open VS Code → Extensions → Search for
+            <strong>CodeMemos</strong> and install.
+          </li>
+          <li>
+            Clone the repository and run the bundled installer:
+            <br />
+            <code
+              >git clone https://github.com/chinmay-sawant/Dokumenter.git</code
+            ><br />
+            Then run the installer script included in the repo:
+            <br />
+            <code>install-extension.bat</code> (Windows) — file is in the
+            repository root.
+          </li>
+        </ol>
+        <p>
+          After installation you can open the extension in the Extension
+          Development Host (F5) for testing or use the installed extension
+          directly in your VS Code.
+        </p>
+      </section>
+
+      <section class="panel minimal">
+        <h3>Why CodeMark?</h3>
+        <p>
+          Designed for large codebase walkthroughs where copying, pasting and
+          organizing snippets is time-consuming. CodeMark compresses discovery →
+          documentation time.
+        </p>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>
+        MIT Licensed •
+        <a
+          href="https://github.com/chinmay-sawant/Dokumenter/blob/master/LICENSE"
+          target="_blank"
+          rel="noopener"
+          >License</a
+        >
+      </p>
+      <p>
+        Made by
+        <a
+          href="https://github.com/chinmay-sawant"
+          target="_blank"
+          rel="noopener"
+          >Chinmay Sawant</a
+        >
+      </p>
+    </footer>
+
+    <script src="script.js"></script>
+  </body>
+</html>
